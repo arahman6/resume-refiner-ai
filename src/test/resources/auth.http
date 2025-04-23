@@ -1,0 +1,24 @@
+### Register New User
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Arif",
+  "lastName": "Rahman",
+  "username": "arif.rahman",
+  "password": "password123",
+  "role": "ADMIN"
+}
+
+### Authenticate Existing User
+POST http://localhost:8080/api/v1/auth/authenticate
+Content-Type: application/json
+
+{
+  "username": "arif.rahman",
+  "password": "password123"
+}
+
+### Call Protected Admin Endpoint (paste token from above)
+GET http://localhost:8080/api/v1/admin
+Authorization: Bearer {{eyJhbGciOiJIUzUxMiJ9.eyJhdXRob3JpdGllcyI6ImFkbWluOndyaXRlLGFkbWluOnJlYWQsUk9MRV9BRE1JTiIsInN1YiI6ImFyaWYucmFobWFuIiwiZXhwIjoxNzQ1NDY3OTA1LCJpc3MiOiJjb21wcm8ubWl1LmVkdSIsImlhdCI6MTc0NTM4MTUwNX0.YI5MExcE1PSBnlBk4VXEJIuhMDa2sPm_fH6zNHKzQcNRCDrcrDHgBQBW3YDdFfetj28IANlEyXiLhVIp1ZBYGQ}}

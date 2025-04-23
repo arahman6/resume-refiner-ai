@@ -1,0 +1,496 @@
+===== ./config/JwtService.java =====
+package edu.miu.cs.cs489.resumerefinerai.config;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.stereotype.Service;
+
+import javax.crypto.SecretKey;
+import java.util.Collection;
+import java.util.Date;
+import java.util.stream.Collectors;
+
+@Service
+public class JwtService {
+
+    @Value("${jwt.secretKey}")
+    private String SECRET;
+
+    public String generateToken(UserDetails userDetails) {
+        return Jwts.builder()
+                .claim("authorities", populateAuthorities(userDetails.getAuthorities()))
+                .subject(userDetails.getUsername())
+                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
+                .issuer("compro.miu.edu")
+                .issuedAt(new Date())
+                .signWith(signInKey())
+                .compact();
+    }
+
+    private String populateAuthorities(Collection<? extends GrantedAuthority> authorities) {
+        return authorities.stream().map(GrantedAuthority::getAuthority).collect(Collectors.joining(","));
+    }
+
+    private SecretKey signInKey() {
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(SECRET));
+    }
+
+    public Claims getClaimsFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(signInKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+}
+===== ./config/ApplicationConfiguration.java =====
+package edu.miu.cs.cs489.resumerefinerai.config;
+
+
+import edu.miu.cs.cs489.resumerefinerai.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@Configuration
+@RequiredArgsConstructor
+public class ApplicationConfiguration {
+
+    private final UserRepository userRepository;
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return username -> userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(username));
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider daoAuthenticationProvider = new DaoAuthenticationProvider();
+        daoAuthenticationProvider.setUserDetailsService(userDetailsService());
+        daoAuthenticationProvider.setPasswordEncoder(passwordEncoder());
+        return daoAuthenticationProvider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
+    }
+}
+===== ./config/JwtFilter.java =====
+package edu.miu.cs.cs489.resumerefinerai.config;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Component
+@RequiredArgsConstructor
+public class JwtFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+    private final UserDetailsService userDetailsService;
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        String authorizationHeader = request.getHeader("Authorization");
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            String token = authorizationHeader.substring(7);
+            //Extract username from token
+            String username = jwtService.getClaimsFromToken(token).getSubject();
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        )
+                );
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        return request.getServletPath().contains("/api/v1/auth");
+    }
+}
+===== ./config/SecurityConfiguration.java =====
+package edu.miu.cs.cs489.resumerefinerai.config;
+
+
+import edu.miu.cs.cs489.resumerefinerai.user.Permission;
+import edu.miu.cs.cs489.resumerefinerai.user.Role;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+@RequiredArgsConstructor
+public class SecurityConfiguration {
+
+    private final JwtFilter jwtFilter;
+    private final AuthenticationProvider authenticationProvider;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+//        http.authorizeHttpRequests().requestMatchers("/public/**").permitAll().anyRequest()
+//                .hasRole("USER").and()
+//                // Possibly more configuration ...
+//                .formLogin() // enable form based log in
+//                // set permitAll for all URLs associated with Form Login
+//                .permitAll();
+//        return http.build();
+        http.csrf(CsrfConfigurer::disable)
+                .authorizeHttpRequests(
+                        authorizeRequests ->
+                                authorizeRequests
+                                        .requestMatchers("/api/v1/auth/*").permitAll()
+                                        .requestMatchers("/api/v1/management/**").hasAnyRole(Role.ADMIN.name(), Role.MEMBER.name())
+                                        .requestMatchers("/api/v1/admin").hasRole(Role.ADMIN.name())
+                                        .requestMatchers("/api/v1/management/admin-write").hasAuthority(Permission.ADMIN_WRITE.getPermission())
+                                        .requestMatchers("/api/v1/management/for-all").hasAnyAuthority(
+                                                Permission.MEMBER_READ.getPermission(),
+                                                Permission.MEMBER_WRITE.getPermission(),
+                                                Permission.ADMIN_WRITE.getPermission(),
+                                                Permission.ADMIN_READ.getPermission()
+                                        )
+                                        .anyRequest().authenticated()
+//                                        .requestMatchers("/api/v1/auth/authenticate").permitAll()
+                )
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .authenticationProvider(authenticationProvider)
+                .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        ;
+        return http.build();
+    }
+}
+===== ./auth/AuthenticationController.java =====
+package edu.miu.cs.cs489.resumerefinerai.auth;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
+public class AuthenticationController {
+
+    private final AuthenticationService authenticationService;
+    /***
+     * for /register
+     */
+    @PostMapping("/register")
+    public ResponseEntity<AuthenticationResponse> register(@RequestBody RegisterRequest registerRequest) {
+        AuthenticationResponse authenticationResponse = authenticationService.register(registerRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(authenticationResponse);
+    }
+
+    /***
+     * for /authenticate
+     */
+    //AuthenticationResponse authenticate(authenticationRequest)
+    @PostMapping("/authenticate")
+    private ResponseEntity<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest authenticationRequest) {
+        AuthenticationResponse authenticationResponse = authenticationService.authenticate(authenticationRequest);
+        return ResponseEntity.status(HttpStatus.OK).body(authenticationResponse);
+    }
+}
+===== ./auth/RegisterRequest.java =====
+package edu.miu.cs.cs489.resumerefinerai.auth;
+
+
+import edu.miu.cs.cs489.resumerefinerai.user.Role;
+
+public record RegisterRequest(
+        String firstName,
+        String lastName,
+        String username,
+        String password,
+        Role role
+) {
+}
+===== ./auth/AuthenticationResponse.java =====
+package edu.miu.cs.cs489.resumerefinerai.auth;
+
+public record AuthenticationResponse(
+        String token
+) {
+}
+===== ./auth/AuthenticationRequest.java =====
+package edu.miu.cs.cs489.resumerefinerai.auth;
+
+public record AuthenticationRequest(
+        String username,
+        String password
+) {
+}
+===== ./auth/AuthenticationService.java =====
+package edu.miu.cs.cs489.resumerefinerai.auth;
+
+import edu.miu.cs.cs489.resumerefinerai.config.JwtService;
+import edu.miu.cs.cs489.resumerefinerai.user.User;
+import edu.miu.cs.cs489.resumerefinerai.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class AuthenticationService {
+
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+
+    public AuthenticationResponse authenticate(AuthenticationRequest authenticationRequest) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        authenticationRequest.username(),
+                        authenticationRequest.password()
+                )
+        );
+        //generate token for the user
+        var user = (User) authentication.getPrincipal();
+        String token = jwtService.generateToken(user);
+        return new AuthenticationResponse(token);
+    }
+
+    public AuthenticationResponse register(RegisterRequest registerRequest) {
+        User user = new User(
+                registerRequest.firstName(),
+                registerRequest.lastName(),
+                registerRequest.username(),
+                passwordEncoder.encode(registerRequest.password()),
+                registerRequest.role()
+        );
+        User registeredUser = userRepository.save(user);
+        //Generate token for this user
+        String token = jwtService.generateToken(registeredUser);
+        return new AuthenticationResponse(token);
+    }
+}
+===== ./ResumeRefinerAiApplication.java =====
+package edu.miu.cs.cs489.resumerefinerai;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class ResumeRefinerAiApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ResumeRefinerAiApplication.class, args);
+    }
+
+}
+===== ./user/repository/UserRepository.java =====
+package edu.miu.cs.cs489.resumerefinerai.user.repository;
+
+import edu.miu.cs.cs489.resumerefinerai.user.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+===== ./user/User.java =====
+package edu.miu.cs.cs489.resumerefinerai.user;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+
+@Entity
+@Table(name = "users")
+@Data
+@NoArgsConstructor
+public class User implements UserDetails {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Long id;
+    private String firstName;
+    private String lastName;
+    private String username;
+    private String password;
+
+    @Enumerated(EnumType.STRING)
+    private Role role;
+
+    public User(String firstName, String lastName, String username, String password, Role role) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.username = username;
+        this.password = password;
+        this.role = role;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+//        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+//        authorities.add(new SimpleGrantedAuthority("ROLE_"+role.name()));
+//        return authorities;
+        return role.getAuthorities();
+    }
+
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+}
+===== ./user/Permission.java =====
+package edu.miu.cs.cs489.resumerefinerai.user;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
+public enum Permission {
+    ADMIN_READ("admin:read"),
+    ADMIN_WRITE("admin:write"),
+    MEMBER_READ("member:read"),
+    MEMBER_WRITE("member:write");
+
+    @Getter
+    private final String permission;
+}
+===== ./user/Role.java =====
+package edu.miu.cs.cs489.resumerefinerai.user;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@RequiredArgsConstructor
+public enum Role {
+    ADMIN(
+            Set.of(Permission.ADMIN_WRITE, Permission.ADMIN_READ)
+    ),
+    MEMBER(
+            Set.of(Permission.MEMBER_WRITE, Permission.MEMBER_READ)
+    );
+
+    @Getter
+    private final Set<Permission> permissions;
+
+
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        List<SimpleGrantedAuthority> authorities = getPermissions().stream()
+                .map(permission -> new SimpleGrantedAuthority(permission.getPermission()))
+                .collect(Collectors.toList());
+        authorities.add(new SimpleGrantedAuthority("ROLE_"+name()));
+        return authorities;
+    }
+}
+===== ./secured/AdminController.java =====
+package edu.miu.cs.cs489.resumerefinerai.secured;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/admin")
+public class AdminController {
+
+    @GetMapping
+    public String getAdmin() {
+        return "Admin: secured end point";
+    }
+}
+===== ./secured/MemberController.java =====
+package edu.miu.cs.cs489.resumerefinerai.secured;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/management")
+public class MemberController {
+
+    @GetMapping
+    public String getMember() {
+        return "Member: secured end point";
+    }
+
+    @GetMapping("/admin-write")
+    @PreAuthorize("hasAuthority('admin:write')")
+    public String memberOnlyForAdminWrite() {
+        return "Member: secured end point only for admin write";
+    }
+
+    @GetMapping("for-all")
+    @PreAuthorize("hasAnyAuthority('admin-write', 'admin-read', 'member-write', 'member-read')")
+    public String memberOnlyForAll() {
+        return "Member: secured end point only for all";
+    }
+
+}
