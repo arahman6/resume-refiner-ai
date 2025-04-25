@@ -594,6 +594,11 @@ public class AuthenticationService {
     }
 
     public AuthenticationResponse register(RegisterRequest registerRequest) {
+
+        if (userRepository.findByUsername(registerRequest.username()).isPresent()) {
+            throw new RuntimeException("Username already exists");
+        }
+
         User user = new User(
                 registerRequest.firstName(),
                 registerRequest.lastName(),
@@ -612,8 +617,10 @@ package edu.miu.cs.cs489.resumerefinerai;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.PropertySource;
 
 @SpringBootApplication
+@PropertySource(value = "file:.env", ignoreResourceNotFound = true)
 public class ResumeRefinerAiApplication {
 
     public static void main(String[] args) {
@@ -1058,7 +1065,7 @@ public class ResumeService {
         copyDirectoryRecursively(templateRoot, latexRoot);
 
         // 4. Update selective sections using OpenAI
-        List<String> updatableSections = List.of("summary.tex", "skills.tex", "experience.tex");
+        List<String> updatableSections = List.of("summary.tex", "skills.tex");  //, "experience.tex"
         Path sectionsDir = latexRoot.resolve("sections");
 
         for (String section : updatableSections) {
