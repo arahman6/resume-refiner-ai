@@ -1,0 +1,15 @@
+### Create a new profile
+POST http://localhost:8080/api/v1/profiles/arif.rahman?profileName=Backend%20Engineer&jobDescription=Builds%20REST%20APIs
+
+### Get all profiles for a user
+GET http://localhost:8080/api/v1/profiles/arif.rahman
+
+### Get a specific profile
+GET http://localhost:8080/api/v1/profiles/arif.rahman/Backend%20Engineer
+
+
+### Upload LaTeX .zip for "Data Engineer" profile
+POST http://localhost:8080/api/v1/profiles/arif.rahman/Data%20Engineer/upload
+Content-Type: multipart/form-data
+
+file=@/Users/arifrahman/Project/CS489__/demolatex/src/main/resources/template.zip
