@@ -1,6 +1,7 @@
 package edu.miu.cs.cs489.resumerefinerai.service;
 
 import edu.miu.cs.cs489.resumerefinerai.dto.request.CreateProfileRequest;
+import edu.miu.cs.cs489.resumerefinerai.dto.response.ProfileResponse;
 import edu.miu.cs.cs489.resumerefinerai.exception.DuplicateProfileException;
 import edu.miu.cs.cs489.resumerefinerai.mapper.ProfileMapper;
 import edu.miu.cs.cs489.resumerefinerai.model.Profile;
@@ -8,6 +9,9 @@ import edu.miu.cs.cs489.resumerefinerai.repository.ProfileRepository;
 import edu.miu.cs.cs489.resumerefinerai.auth.user.User;
 import edu.miu.cs.cs489.resumerefinerai.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,7 +29,7 @@ public class ProfileService {
     private final ProfileMapper profileMapper;
 
 
-    public Profile createProfile(String username, CreateProfileRequest request) {
+    public ProfileResponse createProfile(String username, CreateProfileRequest request) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -38,14 +42,14 @@ public class ProfileService {
         Profile profile = profileMapper.toEntity(request, user);
         Profile savedProfile = profileRepository.save(profile);
         createLatexFolderStructure(user, savedProfile.getProfileName());
-        return savedProfile;
+        return profileMapper.toDto(savedProfile);
     }
 
 
-    public List<Profile> getUserProfiles(String username) {
+    public Page<Profile> getUserProfiles(String username, Pageable pageable) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        return profileRepository.findByUser(user);
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        return profileRepository.findByUser(user, pageable);
     }
 
     public Profile getProfile(String username, String profileName) {

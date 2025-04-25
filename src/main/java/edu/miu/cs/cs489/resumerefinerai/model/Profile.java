@@ -27,4 +27,7 @@ public class Profile {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
+
+    public Profile(String dataEngineer, String s, User user) {
+    }
 }
