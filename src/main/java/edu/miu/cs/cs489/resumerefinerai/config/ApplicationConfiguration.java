@@ -1,7 +1,7 @@
 package edu.miu.cs.cs489.resumerefinerai.config;
 
 
-import edu.miu.cs.cs489.resumerefinerai.user.repository.UserRepository;
+import edu.miu.cs.cs489.resumerefinerai.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

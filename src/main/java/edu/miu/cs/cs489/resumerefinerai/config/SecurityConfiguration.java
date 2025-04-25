@@ -1,8 +1,8 @@
 package edu.miu.cs.cs489.resumerefinerai.config;
 
 
-import edu.miu.cs.cs489.resumerefinerai.user.Permission;
-import edu.miu.cs.cs489.resumerefinerai.user.Role;
+import edu.miu.cs.cs489.resumerefinerai.auth.user.Permission;
+import edu.miu.cs.cs489.resumerefinerai.auth.user.Role;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -57,7 +57,8 @@ public class SecurityConfiguration {
                                                 Permission.ADMIN_WRITE.getPermission(),
                                                 Permission.ADMIN_READ.getPermission()
                                         )
-                                        .anyRequest().authenticated()
+                                        .anyRequest().permitAll()
+//                                        .anyRequest().authenticated()
 //                                        .requestMatchers("/api/v1/auth/authenticate").permitAll()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
