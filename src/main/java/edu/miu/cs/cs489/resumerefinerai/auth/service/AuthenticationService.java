@@ -6,8 +6,10 @@ import edu.miu.cs.cs489.resumerefinerai.auth.dto.response.AuthenticationResponse
 import edu.miu.cs.cs489.resumerefinerai.config.JwtService;
 import edu.miu.cs.cs489.resumerefinerai.auth.user.User;
 import edu.miu.cs.cs489.resumerefinerai.auth.repository.UserRepository;
+import edu.miu.cs.cs489.resumerefinerai.exception.AuthenticationFailedException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,18 +24,22 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
 
-    public AuthenticationResponse authenticate(AuthenticationRequest authenticationRequest) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        authenticationRequest.username(),
-                        authenticationRequest.password()
-                )
-        );
-        //generate token for the user
-        var user = (User) authentication.getPrincipal();
-        String token = jwtService.generateToken(user);
-        return new AuthenticationResponse(token);
+    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.username(),
+                            request.password()
+                    )
+            );
+            var user = (User) authentication.getPrincipal();
+            String token = jwtService.generateToken(user);
+            return new AuthenticationResponse(token);
+        } catch (BadCredentialsException e) {
+            throw new AuthenticationFailedException("Invalid username/password");
+        }
     }
+
 
     public AuthenticationResponse register(RegisterRequest registerRequest) {
 
