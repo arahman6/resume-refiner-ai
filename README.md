@@ -263,6 +263,8 @@ Example of
 - **Swagger UI:** [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 - **OpenAPI JSON:** [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
+![swagger01.png](screenshot/swagger01.png)
+![swagger02.png](screenshot/swagger02.png)
 ---
 
 ## Installation
