@@ -30,7 +30,7 @@ public class DockerLatexCompiler {
                 // Read the log file if available
                 Path logFile = parentDir.resolve(texFileName.replace(".tex", ".log"));
                 if (Files.exists(logFile)) {
-                    System.err.println("\n📄 LaTeX LOG CONTENT:");
+                    System.err.println("\n LaTeX LOG CONTENT:");
                     System.err.println(Files.readString(logFile));
                 }
 

@@ -45,8 +45,8 @@ public class ProfileController {
             @Parameter(description = "Items per page", example = "10")
             @RequestParam(defaultValue = "10") int size,
             @Parameter(description = "Sorting criteria (e.g., 'profileName,asc')", example = "profileName,asc")
-            @RequestParam(defaultValue = "profileName,asc") String[] sort) {
-
+            @RequestParam(defaultValue = "profileName,asc") String[] sort
+    ) {
         // Parse sorting parameters (e.g., "fieldName,direction")
         Sort.Direction direction = sort[1].equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
         Sort sorting = Sort.by(direction, sort[0]);

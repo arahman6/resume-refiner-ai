@@ -57,8 +57,8 @@ public class SecurityConfiguration {
                                                 Permission.ADMIN_WRITE.getPermission(),
                                                 Permission.ADMIN_READ.getPermission()
                                         )
-                                        .anyRequest().permitAll()
-//                                        .anyRequest().authenticated()
+//                                        .anyRequest().permitAll()
+                                        .anyRequest().authenticated()
 //                                        .requestMatchers("/api/v1/auth/authenticate").permitAll()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)

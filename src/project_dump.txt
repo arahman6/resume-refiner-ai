@@ -311,33 +311,32 @@ class ProfileServiceTest {
 
         // Configure mapper
         User mockUser = new User("Test", "User", "testuser", "pass", Role.MEMBER);
-        when(profileMapper.toEntity(validRequest, mockUser))
-                .thenReturn(new Profile(1L, "Dev", "Desc", mockUser));
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(mockUser));
+
     }
 
     @Test
     void createProfile_Success() {
-        // Use initialized request
+        // Arrange
+        User mockUser = new User("Test", "User", "testuser", "pass", Role.MEMBER);
+        CreateProfileRequest validRequest = new CreateProfileRequest("Dev", "Description");
+        Profile mockProfile = new Profile(1L, "Dev", "Description", mockUser);
+
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(mockUser));
+        when(profileRepository.existsByUserAndProfileName(mockUser, "Dev")).thenReturn(false);
+        when(profileMapper.toEntity(validRequest, mockUser)).thenReturn(mockProfile);
+        when(profileRepository.save(mockProfile)).thenReturn(mockProfile);
+        when(profileMapper.toDto(mockProfile)).thenReturn(new ProfileResponse(1L, "Dev", "Description", "testuser"));
+
+        // Act
         ProfileResponse response = profileService.createProfile("testuser", validRequest);
+
+        // Assert
         assertNotNull(response);
+        assertEquals("Dev", response.getProfileName());
+        assertEquals("testuser", response.getUsername());
     }
 
-//    @Test
-//    void createProfile_Success() {
-//        // Arrange
-//        User mockUser = new User("Test", "User", "testuser", "password", Role.MEMBER);
-//        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(mockUser));
-//        when(profileRepository.existsByUserAndProfileName(any(), any())).thenReturn(false);
-//        when(profileRepository.save(any())).thenReturn(new Profile());
-//
-//        // Act
-//        ProfileResponse response = profileService.createProfile("testuser", request);
-//
-//        // Assert
-//        assertNotNull(response);
-//        assertEquals("Data Engineer", response.getProfileName());
-//        verify(profileMapper, times(1)).toDto(any(Profile.class));
-//    }
 }===== ./test/java/edu/miu/cs/cs489/resumerefinerai/ResumeRefinerAiApplicationTests.java =====
 package edu.miu.cs.cs489.resumerefinerai;
 
@@ -433,8 +432,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-
-import java.util.List;
 import java.util.Optional;
 
 public interface ProfileRepository extends JpaRepository<Profile, Long> {
@@ -486,7 +483,7 @@ public class DockerLatexCompiler {
                 // Read the log file if available
                 Path logFile = parentDir.resolve(texFileName.replace(".tex", ".log"));
                 if (Files.exists(logFile)) {
-                    System.err.println("\n📄 LaTeX LOG CONTENT:");
+                    System.err.println("\n LaTeX LOG CONTENT:");
                     System.err.println(Files.readString(logFile));
                 }
 
@@ -553,10 +550,17 @@ public class JwtService {
 ===== ./main/java/edu/miu/cs/cs489/resumerefinerai/config/OpenApiConfig.java =====
 package edu.miu.cs.cs489.resumerefinerai.config;
 
-import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.tags.Tag;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import java.util.List;
 
 @Configuration
 public class OpenApiConfig {
@@ -567,7 +571,26 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Resume Refiner AI API")
                         .version("1.0")
-                        .description("API documentation for user registration, authentication, and role-based access"));
+                        .description("API for resume management with AI-powered refinements")
+                        .contact(new Contact()
+                                .name("Support Team Dummy")
+                                .email("support_dummy@resumerefiner.ai"))
+                        .license(new License()
+                                .name("Apache 2.0")
+                                .url("https://www.apache.org/licenses/LICENSE-2.0")))
+                .addSecurityItem(new SecurityRequirement().addList("BearerAuth"))
+                .components(new Components()
+                        .addSecuritySchemes("BearerAuth",
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")))
+                .tags(List.of(
+                        new Tag().name("Authentication").description("User registration and JWT login"),
+                        new Tag().name("Profile Management").description("Create and manage resume profiles"),
+                        new Tag().name("Admin").description("Admin-only endpoints")
+                )
+        );
     }
 }
 ===== ./main/java/edu/miu/cs/cs489/resumerefinerai/config/ApplicationConfiguration.java =====
@@ -1094,8 +1117,8 @@ public class ProfileController {
             @Parameter(description = "Items per page", example = "10")
             @RequestParam(defaultValue = "10") int size,
             @Parameter(description = "Sorting criteria (e.g., 'profileName,asc')", example = "profileName,asc")
-            @RequestParam(defaultValue = "profileName,asc") String[] sort) {
-
+            @RequestParam(defaultValue = "profileName,asc") String[] sort
+    ) {
         // Parse sorting parameters (e.g., "fieldName,direction")
         Sort.Direction direction = sort[1].equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
         Sort sorting = Sort.by(direction, sort[0]);
